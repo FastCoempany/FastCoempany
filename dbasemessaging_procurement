@@ -1,0 +1,60 @@
+import pandas as pd
+import openai
+from bs4 import BeautifulSoup
+import requests
+from notion.client import NotionClient
+from notion.block import TextBlock, PageBlock
+
+# Initialize OpenAI key
+openai.api_key = "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"
+
+# Initialize Notion client
+client = NotionClient(token_v2="secret_8POIevWkkpD8WthIsMFAHwqz8tzulZVrUlefbCODiLh")
+main_page = client.get_block("https://www.notion.so/DIRECTOR-OF-PROCUREMENT-MESSAGING-5bd26a1151f9451e9098f1f5e9b3d6c3")
+
+# Load data
+data = pd.read_excel('/Users/antaeus.coe/Desktop/dbase_slack_alerts/Organized Alertsnil.xlsx')
+unique_urls = data['Your Column C Name'].unique()
+
+# Function to get content from a URL
+def get_content_from_url(url):
+    try:
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        return soup.get_text()
+    except requests.RequestException:
+        return None
+
+# Function to generate a message based on content
+def generate_message_for_executive(content):
+    try:
+        response = openai.Completion.create(
+            engine="davinci",
+            prompt=f"Based on the following webpage content:\n\n{content}\n\nWrite a punchy, professional message, max 60 words, for a director of procurement executive at a large enterprise.",
+            max_tokens=90  # Roughly 60 words
+        )
+        return response.choices[0].text.strip()
+    except openai.error.OpenAIApiError:
+        return "Failed to generate message."
+
+# Function to generate a Notion page title based on content
+def generate_page_title(content):
+    try:
+        response = openai.Completion.create(
+            engine="davinci",
+            prompt=f"Based on the following webpage content:\n\n{content}\n\nProvide a suitable title for a Notion page directed at a director of procurement executive.",
+            max_tokens=10  # Roughly a short title
+        )
+        return response.choices[0].text.strip()
+    except openai.error.OpenAIApiError:
+        return "Untitled Page"
+
+# For each unique URL, get content, generate message, generate page title, and add to Notion
+for url in unique_urls:
+    content = get_content_from_url(url)
+    message = generate_message_for_executive(content)
+    page_title = generate_page_title(content)
+    
+    # Create a new child page in Notion
+    child_page = main_page.children.add_new(PageBlock, title=page_title)
+    child_page.children.add_new(TextBlock, title=message)
